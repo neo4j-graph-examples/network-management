@@ -1,0 +1,1046 @@
+﻿// https://docs.google.com/a/neotechnology.com/presentation/d/1uajyGl64zdpHjD1d92hQVEJErdnnZ9bACJF7J-TnEWI/edit?usp=drive_web
+// https://www.vmware.com/pdf/vi_architecture_wp.pdf
+// ping Alan, share document
+++++
+<style type="text/css">
+.smallest {
+   font-size:0.6em;
+}
+</style>
+++++
+
+== Network Management - Introduction
+:neo4j-version: 3.0
+:author: Michael Hunger
+:tags: network-mgt,it-operations,datacenter
+:images: https://dl.dropboxusercontent.com/u/14493611
+:images: {img}
+:experimental:
+
+Computer networks span all levels of the stack from physical connections up to mobile and web-applications connecting networks of users.
+
+Graph Databases offer a natural way of modelling, storing and querying all these types of computer networks.
+
+A graph database like Neo4j can be utilized for:
+
+* Configuration Management
+* Impact Analysis
+* Planning
+* Security and Hardening of Networks
+* Intrusion Detection
+* Traffic Analytics
+* Analytics of user behavior
+
+In this example we want to look at Network Management and Impact Analysis from the level of routing (TCP/IP) upwards to managing applications and tracing their dependencies.
+
+Throughout the guide you'll find Cypher statements that you can execute, by clicking on them and then executing them by hitting the run button.
+
+== Modeling
+
+image::{images}/Network-Management-Model.svg[width=700, float=right]
+
+We can model the network endpoints (boxes like servers, routers, firewalls, racks) of the data center as nodes and the "cables" between them as relationships.
+
+Another type of node represent networks and interfaces.
+
+On the application level we have the operating system, virtual machines, application and services that are modeled as entities.
+
+Our example data is already set-up, in the "resources" section at the end, you'll find some pointers there.
+
+== DataCenter
+
+This is the full data model of your graph.
+
+image::{images}/network-schema-arrows.jpg[float=right]
+
+If you want to see it yourself, run 
+
+[source,cypher]
+----
+CALL db.schema()
+----
+
+Imagine we have a `DataCenter` connected to an Interconnect via an `Egress Router`.
+The datacenter uses a `10.x.x.x/8` IP address range.
+
+The DataCenter consists of several Zones which are connected to the main backbone each via a `Router` (10.zone.*/16).
+
+From there each zone is broken down into rows of `Racks`.
+
+Each `Rack` contains different types of `Servers` and has its own `Switch` to connect to the datacenter routers backplane.
+
+Each `Server` has external network `Interfaces` that connect to the rack switch, the local networks being `10.zone.rack.*/24`.
+
+Each machine either runs a real Operating System (`OS`) or a Virtualization Manager that runs a number of Virtual Machines.
+
+For operational simplicity we only run one `Application` per OS which uses a number of `Ports` on the external interface.
+
+////
+// todo subset / asciidoctor diagram for networks
+// image::{images}/Network-Management-Model.svg[width=700]
+// image::{images}/network-schema-hardware.jpg[]
+image::{images}/network-software-arrows.jpg[float=right]
+image::{images}/network-hardware-arrows.jpg[]
+////
+
+Usually we would get this kind of information from a configuration management database (CMDB), network management tools or agents installed on the machines.
+
+== Network Exploration: DataCenter and Zones
+
+Let's walk through the data, step by step. Let's start with the DataCenter.
+
+[source,cypher]
+----
+MATCH network = (dc:DataCenter {name:"DC1",location:"Iceland, Rekjavik"})
+             -[:CONTAINS]->(:Router)
+             -[:ROUTES]->(:Interface)
+RETURN network;
+----
+
+image::{images}/network-zones.jpg[float=right]
+
+The datacenter consists of 4 zones, each of which has its own separate `Network` `10.zone.*/16`, and it's own `Router`.
+
+We can draw out that verbal description in a query with patterns matching the network parts.
+
+[source,cypher]
+----
+MATCH (dc:DataCenter {name:"DC1"})-[:CONTAINS]->(re:Router:Egress)-[:ROUTES]->(rei:Interface)
+
+MATCH (nr:Network:Zone)<-[:CONNECTS]-(rei)
+
+// router in DC, connect it via an interface to the zone network
+MATCH (dc)-[:CONTAINS]->(r:Router)-[:ROUTES]->(ri:Interface)-[:CONNECTS]->(nr)
+
+RETURN *;
+----
+
+To visualize the DataCenter and its components so far, we can also start at the center and then go 3 hops out.
+
+[source,cypher]
+----
+MATCH path = (dc:DataCenter)-[*3]-(:Network)
+RETURN path;
+----
+
+We could also get statistical information, like the addresses of routers and interfaces in each network.
+
+You can see very well how the graph representation in the match pattern resembles our domain model.
+
+[source,cypher]
+----
+MATCH (r:Router)-[:ROUTES]->(ri:Interface)-[:CONNECTS]->(nr:Network)
+WHERE r.zone IS NOT NULL
+RETURN nr.ip as network_ip, ri.ip as router_if_ip, r.name as router, r.zone as zone;
+----
+
+//ifndef::env-guide[]
+----
+╒════════════╤══════════════╤═════════╤══════╕
+│"network_ip"│"router_if_ip"│"router" │"zone"│
+╞════════════╪══════════════╪═════════╪══════╡
+│"10.1"      │"10.1.0.254"  │"DC1-R-1"│1     │
+├────────────┼──────────────┼─────────┼──────┤
+│"10.2"      │"10.2.0.254"  │"DC1-R-2"│2     │
+├────────────┼──────────────┼─────────┼──────┤
+│"10.3"      │"10.3.0.254"  │"DC1-R-3"│3     │
+├────────────┼──────────────┼─────────┼──────┤
+│"10.4"      │"10.4.0.254"  │"DC1-R-4"│4     │
+└────────────┴──────────────┴─────────┴──────┘
+----
+//endif::env-guide[]
+
+== Network Exploration: Racks
+
+image::{images}/network-rack.jpg[width=600,float=right]
+
+Each zone contains 10 `Racks`, each of which has it's own `Switch` and subnet with an IP like this pattern `10.zone.rack.*/24`.
+
+[source,cypher]
+----
+MATCH (dc:DataCenter {name:"DC1"})-[:CONTAINS]->(rack:Rack)-[:HOLDS]->(s:Switch)-[:ROUTES]->(si:Interface)<-[:ROUTES]-(nr:Network:Zone)
+
+RETURN *;
+----
+
+Now our network has grown quite a bit:
+
+[source,cypher]
+----
+MATCH network = (dc:DataCenter)-[*6]-(:Rack)
+RETURN network;
+----
+
+== Network Connectivity
+
+Now we could already have a look at the network connectivity in our datacenter.
+
+If we look now at the overall connections we need to use shortest-paths which represents the most efficient route.
+
+.Connectivity before: 40 routes a 5 hops
+[source,cypher]
+----
+MATCH path = allShortestPaths( (rack:Rack)-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress) )
+RETURN length(path) as hops, count(*) as count;
+----
+
+What happens if one of our cables gets loose or cut, i.e. the `ROUTES` relationship between the switch's interface and the network is gone.
+
+Let's *cut the cable* of this first switch.
+
+[source,cypher]
+----
+MATCH (:Interface {ip:"10.1.1.254"})<-[rel:ROUTES]-(:Network)
+DELETE rel
+----
+
+Connectivity after: 39 routes a 5 hops
+
+[source,cypher]
+----
+MATCH path = allShortestPaths( (rack:Rack)-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress) )
+RETURN length(path) as hops, count(*) as count;
+----
+
+Now all the machines in that Rack are cut off, no connection anymore, which we can demonstrate by trying to find the shortest path.
+
+[source,cypher]
+----
+MATCH connection = allShortestPaths( (rack:Rack {name:"DC1-RCK-1-1"})-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress) )
+RETURN connection;
+----
+
+How can we fix that? 
+We could connect each switch to all the other three networks too, so we would survive the loss of 3 of those 4 connections.
+
+.Createing new, redundant network connections
+[source,cypher]
+----
+// for all zones
+MATCH (nr:Network:Zone)
+// find *all* switches and their interface
+MATCH (s:Switch)-[:ROUTES]->(si:Interface)
+// connect them to all the zones, if not yet connected
+MERGE (si)<-[:ROUTES]-(nr);
+----
+
+[source,cypher]
+----
+MATCH path = allShortestPaths((rack:Rack)-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress))
+RETURN length(path) as hops, count(*) as count;
+----
+
+----
+╒══════╤═══════╕
+│"hops"│"count"│
+╞══════╪═══════╡
+│5     │160    │
+└──────┴───────┘
+----
+
+image::{images}/network-alternative-routes.jpg[float=right]
+
+Cut the first cable of this first switch again.
+
+[source,cypher]
+----
+MATCH (:Interface {ip:"10.1.1.254"})<-[rel:ROUTES]-(:Network)
+WITH rel LIMIT 1
+DELETE rel
+----
+
+But that Rack is now still connected with 3 alternative routes.
+
+[source,cypher]
+----
+MATCH path = allShortestPaths((rack:Rack {zone:1,rack:1})-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress))
+RETURN path;
+----
+
+
+ifndef::env-guide[]
+----
+╒══════╤═══════╕
+│"hops"│"count"│
+╞══════╪═══════╡
+│5     │3      │
+└──────┴───────┘
+----
+endif::env-guide[]
+
+// what happens if the whole network is cut off
+
+Now let's look at the servers in those racks.
+
+== Machine types
+
+Similar to the machines you can rent on AWS we use machine types, for which we auto-created some reasonable capacities for CPU, RAM and DISK.
+
+[source,cypher]
+----
+MATCH (t:Type) 
+RETURN t.name, t.id, t.cpu, t.ram, t.disk;
+----
+
+----
+╒══════════════════╤══════╤═══════╤═══════╤════════╕
+│"t.name"          │"t.id"│"t.cpu"│"t.ram"│"t.disk"│
+╞══════════════════╪══════╪═══════╪═══════╪════════╡
+│"xs-1/1/1"        │0     │1      │1      │1       │
+├──────────────────┼──────┼───────┼───────┼────────┤
+│"s-2/4/5"         │1     │2      │4      │5       │
+├──────────────────┼──────┼───────┼───────┼────────┤
+│"m-4/16/25"       │2     │4      │16     │25      │
+├──────────────────┼──────┼───────┼───────┼────────┤
+│"l-8/64/125"      │3     │8      │64     │125     │
+├──────────────────┼──────┼───────┼───────┼────────┤
+│"xl-16/256/625"   │4     │16     │256    │625     │
+├──────────────────┼──────┼───────┼───────┼────────┤
+│"xxl-32/1024/3125"│5     │32     │1024   │3125    │
+└──────────────────┴──────┴───────┴───────┴────────┘
+----
+
+== Machines
+
+Each Rack contains 200 machines of the types we just introduced, so that in total we get 8000 servers in our datacenter.
+
+As expected, the distribution of the types is inverse to their capabilities.
+
+As the graph visualization of our full datacenter would be pretty but otherwise useless ...
+
+image::{images}/network-8000-machines.jpg[]
+
+image::{images}/network-rack-machines-type.jpg[width=400,float=right]
+
+We'd rather look at the contents of a single rack
+
+.Visualization of Rack `DC1-RCK-2-1`
+[source,cypher]
+----
+MATCH (r:Rack {name:"DC1-RCK-2-1"})-[:HOLDS]->(m:Machine),
+      (m)-[:ROUTES]->(i:Interface)-[:CONNECTS]->(si)<-[:ROUTES]-(s:Switch),
+      (m)-[:TYPE]->(type:Type)
+RETURN *
+----
+
+or it's stats.
+
+.Contents of Rack `DC1-RCK-2-1`
+[source,cypher]
+----
+MATCH (r:Rack {name:"DC1-RCK-2-1"})-[:HOLDS]->(m:Machine),
+      (m)-[:ROUTES]->(i:Interface)-[:CONNECTS]->(si)<-[:ROUTES]-(s:Switch),
+      (m)-[:TYPE]->(type:Type)
+RETURN r.name as rack, si.ip as switchIp, properties(type) as type, count(m) as machines, min(i.ip) as minIp, max(i.ip) as maxIp
+ORDER BY machines DESC;
+----
+
+ifndef::env-guide[]
+[.smallest]
+----
+╒═════════════╤════════════╤═══════════════════════════════════════════════════════════════════════════════════════╤══════════╤════════════╤════════════╕
+│"rack"       │"switchIp"  │"type"                                                                                 │"machines"│"minIp"     │"maxIp"     │
+╞═════════════╪════════════╪═══════════════════════════════════════════════════════════════════════════════════════╪══════════╪════════════╪════════════╡
+│"DC1-RCK-2-1"│"10.2.1.254"│{"disk":"5","name":"s-2/4/5","cpu":"2","id":"1","type":"s","ram":"4"}                  │"94"      │"10.2.1.100"│"10.2.1.99" │
+├─────────────┼────────────┼───────────────────────────────────────────────────────────────────────────────────────┼──────────┼────────────┼────────────┤
+│"DC1-RCK-2-1"│"10.2.1.254"│{"disk":"1","name":"xs-1/1/1","cpu":"1","id":"0","type":"xs","ram":"1"}                │"52"      │"10.2.1.1"  │"10.2.1.9"  │
+├─────────────┼────────────┼───────────────────────────────────────────────────────────────────────────────────────┼──────────┼────────────┼────────────┤
+│"DC1-RCK-2-1"│"10.2.1.254"│{"disk":"25","name":"m-4/16/25","cpu":"4","id":"2","type":"m","ram":"16"}              │"34"      │"10.2.1.147"│"10.2.1.180"│
+├─────────────┼────────────┼───────────────────────────────────────────────────────────────────────────────────────┼──────────┼────────────┼────────────┤
+│"DC1-RCK-2-1"│"10.2.1.254"│{"disk":"125","name":"l-8/64/125","cpu":"8","id":"3","type":"l","ram":"64"}            │"13"      │"10.2.1.181"│"10.2.1.193"│
+├─────────────┼────────────┼───────────────────────────────────────────────────────────────────────────────────────┼──────────┼────────────┼────────────┤
+│"DC1-RCK-2-1"│"10.2.1.254"│{"disk":"625","name":"xl-16/256/625","cpu":"16","id":"4","type":"xl","ram":"256"}      │"5"       │"10.2.1.194"│"10.2.1.198"│
+├─────────────┼────────────┼───────────────────────────────────────────────────────────────────────────────────────┼──────────┼────────────┼────────────┤
+│"DC1-RCK-2-1"│"10.2.1.254"│{"disk":"3125","name":"xxl-32/1024/3125","cpu":"32","id":"5","type":"xxl","ram":"1024"}│"2"       │"10.2.1.199"│"10.2.1.200"│
+└─────────────┴────────────┴───────────────────────────────────────────────────────────────────────────────────────┴──────────┴────────────┴────────────┘
+----
+endif::env-guide[]
+
+We can also query for a distribution of machine types across the datacenter.
+
+[source,cypher]
+----
+MATCH (r:Rack)-[:HOLDS]->(m:Machine)-[:TYPE]->(type:Type)
+RETURN properties(type) as type, count(*) as c
+ORDER BY c DESC;
+----
+
+----
+╒══════════════════════════════════════════════════════════════════╤════╕
+│"t"                                                               │"c" │
+╞══════════════════════════════════════════════════════════════════╪════╡
+│{"disk":5,"name":"s-2/4/5","cpu":2,"id":1,"ram":4}                │3760│
+├──────────────────────────────────────────────────────────────────┼────┤
+│{"disk":1,"name":"xs-1/1/1","cpu":1,"id":0,"ram":1}               │2080│
+├──────────────────────────────────────────────────────────────────┼────┤
+│{"disk":25,"name":"m-4/16/25","cpu":4,"id":2,"ram":16}            │1360│
+├──────────────────────────────────────────────────────────────────┼────┤
+│{"disk":125,"name":"l-8/64/125","cpu":8,"id":3,"ram":64}          │520 │
+├──────────────────────────────────────────────────────────────────┼────┤
+│{"disk":625,"name":"xl-16/256/625","cpu":16,"id":4,"ram":256}     │200 │
+├──────────────────────────────────────────────────────────────────┼────┤
+│{"disk":3125,"name":"xxl-32/1024/3125","cpu":32,"id":5,"ram":1024}│80  │
+└──────────────────────────────────────────────────────────────────┴────┘
+----
+
+Or if we treat our datacenter as a supercomputer, what's the total amount of CPUs, RAM and disk available:
+
+[source,cypher]
+----
+MATCH (m:Machine)-[:TYPE]->(type:Type)
+RETURN count(*) as count, sum(type.cpu) as cpus, sum(type.ram) as ram, sum(type.disk) as disk;
+----
+
+.Not bad, that's quite some compute power.
+----
+╒═══════╤══════╤══════╤══════╕
+│"count"│"cpus"│"ram" │"disk"│
+╞═══════╪══════╪══════╪══════╡
+│8000   │24960 │205280│494880│
+└───────┴──────┴──────┴──────┘
+----
+
+== Software: Operating Systems and Applications
+
+Bare-metal hardware is cool, but something has to run on it to make it useable.
+
+Most likely it will be some kind of virtualization infrastructure that allows dynamic reallocation of the compute, memory and disk resources.
+
+Because of the added complexity, we skip this for now.
+
+For our software we differentiate between `Operating Systems, Services and Applications` (which could also be micro services).
+
+Each of them has a name, version(s) and dependencies.
+
+In  a more elaborate model we could also handle other resource requirements like RAM / CPU / DISK per running software instance.
+
+Let's look at our available operating systems.
+
+[source,cypher]
+----
+MATCH (o:OS:Software)-[:VERSION]->(v)
+OPTIONAL MATCH (v)<-[:PREVIOUS]-(vnext)
+RETURN o.name as os, v.name as version, vnext.name as next_version
+ORDER BY os, version;
+----
+
+Similar for our other software
+
+[source,cypher]
+----
+MATCH (s:Software) WHERE not s:OS
+OPTIONAL MATCH (s)-[:VERSION]->(v) 
+OPTIONAL MATCH (s)-[:DEPENDS_ON]->(dv)<-[:VERSION]-(d)
+RETURN s.name, collect(v.name) as versions, filter(x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL) as dependencies, s.ports;
+----
+
+== Software: Running on Machines
+
+Each of our machines is set up to run an OS and a single application, each of which might require other dependencies that are also installed.
+
+image::{images}/network-software-arrows.jpg[]
+
+[source,cypher]
+----
+MATCH (m:Machine) WHERE (m)-[:RUNS]->() AND rand() < 0.05 WITH m LIMIT 1
+MATCH (m)-[r:RUNS]->(p:Process)-[i:INSTANCE]->(sv)
+OPTIONAL MATCH (sv)<-[v:VERSION]-(sw)
+RETURN *
+----
+
+image::{images}/network-software-machine.jpg[]
+
+== Dependency Analysis
+
+We could look at dependencies between data center elements on the physical level, like routers, switches and interfaces.
+
+Another way to look at it is to determine dependencies between machines based on their internal and external connections.
+
+But we can also use the software and its dependencies to determine bottlenecks and frequently dependent upon components.
+
+Let's look at all the software that uses Neo4j and the running Neo4j instances.
+
+////
+* TODO distribute services across machines
+* TODO lookup services for connecting
+* TODO have a depends_on between instances
+* have multiple consumers depend on a service / machine
+* TODO create pid, start-time for process
+////
+
+[source,cypher]
+----
+MATCH (s)-[:DEPENDS_ON]->(nv:Version)<-[:VERSION]-(n:Software:Service {name:"neo4j"})
+MATCH (s)<-[:INSTANCE]-(sp)<-[:RUNS]-(sm:Machine)
+MATCH (sp)-[DEPENDS_ON]->(np)-[:INSTANCE]->(nv)
+MATCH (np)<-[:RUNS]-(nm:Machine)
+RETURN sm as software_machine, sp as software_process, s as software, nv as neo_version,np as neo4j_process, np as neo_machine
+LIMIT 10
+----
+
+////
+TODO
+As multiple consumers rely on our services, we can determine which are the most dependent upon components in our system.
+
+TODO
+We could then 
+////
+
+== Configuration Management
+
+Proper IT infrastructures use a large number of configuration parameters to customize commodity hardware and software.  To manage all of the variables, Configuration Management Databases (CMDBs) are used.  Systems require certain variables, and can report what is currently configured so that the CMDB can detect issues, and send necessary updates.
+
+In the past, CMDBs were mostly used for network, hardware and OS level configuration.  Today, their use has expanded into services to support modern architectures.  A number of related systems have popped up, such as ZooKeeper, Konsul, Eureka, and others.
+
+Due to the variety of systems used for providing configuration to the infrastructure, it is very useful to create a unified, up to date view of the situation in your systems graph.
+
+=== Upgrade OS Version and its Dependencies for a Version Range
+
+We're looking for machines in our Graph-CMDB whose Operating systems have to be updated.
+The OS versions were linked in a list of `:PREVIOUS` connections.
+So we can easily determine if someone have an older than the expected version, even if version numbers are not sortable.
+Those machine will be marked for an update to the correct version.
+
+.Mark for update
+[source,cypher]
+----
+MATCH (os:OS:Software)-[:VERSION]->(newVersion) WHERE os.name = 'Debian' and newVersion.name = '8-Jessie'
+
+MATCH (m:Machine)-[:RUNS]->(op:OS:Process)-[:INSTANCE]->(currentVersion)
+WHERE (currentVersion)<-[:PREVIOUS*]-(newVersion)
+
+// create update request
+CREATE (m)-[:UPDATE_TO {ts:timestamp()}]->(newVersion)
+----
+
+All machines with `UPDATE_TO` requests can be found by tools and operators.
+
+.Find pending updates
+[source,cypher]
+----
+MATCH (r:Rack)-[:HOLDS]->(m:Machine)-[:UPDATE_TO]->(vNew:Version)<-[:VERSION]-(os:OS:Software)
+MATCH (m)-[:RUNS]->(:OS:Process)-[:INSTANCE]->(vCurr)
+WHERE vCurr <> vNew
+RETURN r.name, m.name, os.name, vCurr.name as currentVersion, vNew.name as newVersion
+LIMIT 100;
+----
+
+When the local OS is physically updated, the old `:OS:Process` will be stopped and the one will run.
+
+.Replace old OS instance with new
+[source,cypher]
+----
+MATCH (m:Machine)-[:UPDATE_TO]->(vNew:Version)<-[:VERSION]-(os:OS:Software)
+MATCH (m)-[:RUNS]->(op:OS:Process)-[:INSTANCE]->(vCurr)
+WHERE vCurr <> vNew
+CREATE (m)-[:RUNS]->(opNew:OS:Process)-[:INSTANCE]->(vNew)
+DETACH DELETE op;
+----
+
+After the physical update has been performed, the machines will report the now updated version and the update request can be removed.
+
+.Remove resolved update requests
+[source,cypher]
+----
+MATCH (m:Machine)-[update:UPDATE_TO]->(v:Version)<-[:VERSION]-(os:OS:Software)
+WHERE (m)-[:RUNS]->(:OS:Process)-[:INSTANCE]->(v)
+
+DELETE update;
+----
+
+////
+=== x
+
+[source,cypher]
+----
+
+----
+
+// lending-club
+////
+
+== IT-Monitoring and Governance
+
+Live network operations need to be supervised to ensure smooth operations, prevent bottlenecks, protect from attacks and vulnerabilities and allow maintenance planning and failure handling.
+
+The information is either acquired by listening on network traffic and inferring running services and user and application activity combined with port-scans.
+
+Alternatively, agents installed on the machines report the state of each server to the network or centralized databases which update the live state of the network.
+
+// todo Alan R. Assimilation Systems
+// todo shodan & co -> Will
+
+Based on our existing model, those incoming messages and events can do the following:
+
+* Create new entries for Servers, Switches, Interfaces
+* Track running Services via used ports and traffic
+* Infer user and application activity and group by network segment, source, used service
+* Detect abnormal operations like attacks or potential bottlenecks and issue warnings
+* Track violations of rules, like isolation of the DMZ, certain firewall rules etc.
+
+Here is an example of a new connection coming in and the graph being updated accordingly.
+Subsequent information for that connection will be aggregated until it is closed, then the totals could be added to the general `CONNECTIONS` relationship between the two IPs.
+
+We could generate some events, by having processes from some machines accessing processes from other (random) Machines.
+
+// todo cross machine service dependencies like CRM -> CMS or service1 -> service100
+
+[source,cypher]
+----
+MATCH (m:Machine) WITH collect(m) as machines
+WITH machines, size(machines) as len
+UNWIND range(1,10) as idx
+WITH machines[toInteger(rand()*len)] as source, machines[toInteger(rand()*len)] as target
+MATCH (source)-[:ROUTES]->(si:Interface)-[:EXPOSES]->(sp:Port)<-[:LISTENS]-(sourceAppProcess)-[:INSTANCE]->(sourceApp)
+WITH target, source,si,head(collect(sp)) as sp, sourceAppProcess,sourceApp
+// todo limit to first port
+MATCH (target)-[:ROUTES]->(ti:Interface)-[:EXPOSES]->(tp:Port)<-[:LISTENS]-(targetAppProcess)-[:INSTANCE]->(targetApp)
+WITH source,si,sp, sourceAppProcess,sourceApp,target,ti,head(collect(tp)) as tp, targetAppProcess, targetApp
+// todo limit to first port
+RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
+        connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInt(rand()*1000))+"@"+source.name, 
+        time:timestamp(), packets: 1, mtu: 1500 }} as event
+----
+
+
+[source,cypher]
+----
+:param events:
+[
+{"source":{"ip":"10.1.7.100","port":11210},"id":"3e41d6f0-fdce-48f4-9bff-818359d8f0af","target":{"ip":"10.3.3.112","port":8080},
+ "connection":{"source":"couchbase","target":"webapp","user":"user436@DC1-RCK-1-7-M-100","time":1490540382971},"type":"OpenConnection",
+ "packets": 1, "mtu": 1500, "time": 1490904418539 },
+{"source":{"ip":"10.1.4.91","port":7474},"id":"fed44be6-55f5-4e42-aab1-bebc5c818268","target":{"ip":"10.4.6.7","port":8080},
+ "connection":{"source":"neo4j","target":"webapp","user":"user911@DC1-RCK-1-4-M-91","time":1490540382971},"type":"OpenConnection",
+ "packets": 1, "mtu": 1500, "time": 1490904464824 }
+]
+----
+
+// todo add durations of connections
+
+[source, cypher]
+----
+UNWIND {events} AS event
+WITH event WHERE event.type = 'OpenConnection'
+
+MERGE (si:Interface {ip:event.source.ip})
+MERGE (si)-[:OPENS]->(sp:Port {port: event.source.port})
+
+MERGE (ti:Interface {ip:event.target.ip})
+MERGE (ti)-[:LISTENS]->(tp:Port {port:event.target.port})
+
+CREATE (sp)<-[:FROM]-(c:Connection {id:event.id})–[:TO]->(tp)
+SET c += event.connection // type, timestamp, user-info, ...
+MERGE (si)-[cstats:CONNECTIONS]->(ti)
+SET si.count = coalesce(si.count,0) + 1
+SET si.packets = coalesce(si.packets,0) + event.packets
+SET si.volume = coalesce(si.volume,0) + event.packets * event.mtu
+----
+
+All the information is aggregated in a live graph representation which is available for querying for alerts & notifications, dashboards, inventory summaries, reports and more.
+
+Historic information can be stored as well as a timeline chain of changes attributed to cause.
+Both can be queried by operators to drill down into detailed analysis.
+
+.Connections opened over a time range
+[source,cypher]
+----
+MATCH (si:Interface)-[:OPENS]->(sp:Port)<-[:FROM]-(c:Connection)–[:TO]->(tp:Port)<-[:LISTENS]-(ti:Interface)
+WHERE c.type = 'OpenConnection'
+RETURN si.ip as source, ti.ip as target, apoc.date.format(c.time,'ms','yyyy-MM-dd HH') as hour, count(distinct c) as count
+ORDER BY hour ASC, count DESC
+LIMIT 100;
+----
+
+// TODO examples
+
+== Examples for graph based Network Management Solutions
+
+A number of commercial solutions provide this kind of service, some of them are running Neo4j.
+
+There are also open source solutions like https://github.com/LendingClub/mercator[Mercator from Lending Club] and the http://assimilationsystems.com/[Assimilation Project by Alan Robertson].
+
+This real-time IT inventory information is also required for due diligence, e.g. for corporate investments, mergers or acquisitions.
+
+// At the FOSDEM conference, https://fosdem.org/2017/schedule/event/graph_traffic_analysis_hadoop_patterns/[Cloudera engineers demonstrated] how they used graph analytics and visualization to make traffic information of a Hadoop cluster accessible.
+// todo cloudera project
+
+
+== Monitoring Use-Cases
+
+Our graph contains both the static topological information and a lot of runtime information using the base topology. 
+From the runtime data we can retrieve different metrics.
+
+=== For instance, minimal, average and maximal runtimes of software instances per type
+
+[source,cypher]
+----
+MATCH (v)<-[:INSTANCE]-(sp:Process)<-[:RUNS]-(sm:Machine)
+MATCH (s:Software)-[:VERSION]->(v:Version)
+WITH s.name as software, v.name as version, timestamp() - sp.startTime as runtime
+RETURN software, version, count(*) as instances, { min: min(runtime), max: max(runtime), avg:avg(runtime) } as runtime
+----
+
+=== Data Transer Volume between Interfaces
+
+// todo add durations of connections
+
+[source,cypher]
+----
+MATCH path = (source:Interface)-[con:CONNECTIONS]->(target:Interface)
+RETURN source.ip, target.ip, sum(con.packets) as packets, sum(con.volume) as volume
+----
+
+////
+
+TODO
+=== Data Volume Flow over the Network
+
+[source,cypher]
+----
+MATCH path = allShortestPaths((rr:Router:Egress)-[rel:CONNECTS*]->(i:Interface))
+UNWIND rel as con
+RETURN length(path), min(con.flow), max(con.flow), avg(con.flow)
+----
+////
+
+
+== Resource Management Graph
+
+If you use a resource manager like Apaoche Mesos (or DC/OS), Kubernetes etc. you specify for each piece of software you run not just name, version and dependencies but also resource requirements like cpu, ram, disk, ports and more.
+
+A scheduler then takes the available resources of a configured machine cluster to schedule and allocate it's resources to the needs and numbers of the required instances of software to run.
+It also takes care of health checks, and (re)starting / (re)scheduling and (re)routing of individual new or failed instances.
+
+To model the resource graph of such a system is interesting to look at and reason about, especially if other requirements like indicated co-location or disk-reuse are taken into account.
+
+// TODO mesos resource graph with Johannes
+
+== References
+
+* https://neo4j.com/use-cases/network-and-it-operations/[Neo4j Solutions: Network & IT Operations]
+* https://neo4j.com/resources/network-datacenter-white-paper/[WP: Graph Databases Solve Problems in Network and Data Center Management]
+// * Orange SFR
+* http://assimilationsystems.com/[Assimilation Systems] https://neo4j.com/blog/solve-network-management-problems-with-neo4j/[Interview with Founder Alan Robertson]
+* https://neo4j.com/graphgists/?category=network-and-it-operations[Network Management GraphGists]
+* Lending Club Engineering created a number of network management projects using Neo4j
+** https://neo4j.com/blog/managing-microservices-neo4j/[Presentation], https://www.slideshare.net/robschoening/managing-microservices-with-neo4j-53389282[Slides]
+** MacGyver: DevOps Multi-Tool https://github.com/LendingClub?q=macgyver[Repositories] https://www.slideshare.net/neo4j/neo4j-for-cloud-management-at-scale[Slides]
+** Mercator: produce graph model projections of infrastructure https://github.com/LendingClub/mercator[Repository]
+// ** Protector
+// * check other use-cases cisco?
+* http://springinpractice.com/2011/12/17/domain-modeling-with-spring-data-neo4j-code[Building the Zkybase CMDB using Neo4j and Spring Data Neo4j]
+* http://lightmesh.com/[LigthMesh CMDB solution from Neo4j Partner xnlogic]
+* https://labs.vmware.com/vmtj/simplifying-virtualization-management-with-graph-databases[Article: Simplifying Virtualization Management with Graph Databases]
+* https://www.vmware.com/pdf/vi_architecture_wp.pdf[WhitePaper: VMware Infrastructure Architecture Overview]
+
+////
+
+== Creating Data
+
+=== Data Center
+
+[source,cypher]
+----
+CREATE (dc:DataCenter {name:"DC1",location:"Iceland, Rekjavik"})-[:CONTAINS]->(re:Router:Egress {name:"DC1-RE"})
+CREATE (re)-[:ROUTES]->(:Interface {ip:"10.0.0.254"});
+----
+
+=== Zones
+
+The datacenter consists of 4 zones, each of which has it's own separate `Network` `10.zone.*/16`, and it's own `Router`.
+
+
+[source,cypher]
+----
+WITH 4 AS zones
+MATCH (dc:DataCenter {name:"DC1"})-[:CONTAINS]->(re:Router:Egress)-[:ROUTES]->(rei:Interface)
+
+// for each zone
+WITH * UNWIND range(1,zones) AS zid
+
+// create zone network
+CREATE (nr:Network:Zone {ip:"10."+zid, size: 16, zone:zid})<-[:CONNECTS]-(rei)
+
+// create router in DC, connect it via an interface to the zone network
+CREATE (dc)-[:CONTAINS]->(r:Router {name:"DC1-R-"+zid, zone:zid})-[:ROUTES]->(ri:Interface {ip:nr.ip+".0.254"})-[:CONNECTS]->(nr);
+----
+
+=== Racks
+
+[source,cypher]
+----
+WITH 10 as racks
+MATCH (dc:DataCenter {name:"DC1"})
+MATCH (nr:Network:Zone) // one per zone
+
+WITH * UNWIND range(1,racks) AS rackid
+
+CREATE (dc)-[:CONTAINS]->(rack:Rack {name:"DC1-RCK-"+nr.zone+"-"+rackid, rack:rackid, zone:nr.zone})-[:HOLDS]->(s:Switch {ip:nr.ip+"."+rackid, rack:rackid})-[:ROUTES]->(si:Interface {ip:s.ip+".254"})<-[:ROUTES]-(nr);
+----
+
+=== Machine types
+
+Similar to the machines you can rent on AWS we use machine types, for which we auto-create some reasonable capacities for CPU, RAM and DISK.
+
+[source,cypher]
+----
+WITH ["xs","s","m","l","xl","xxl"] as typeNames
+UNWIND range(0,size(typeNames)-1) as idx
+CREATE (t:Type {id:idx, cpu: toInt(2^idx), ram:toInt(4^idx), disk:toInt(5^idx), type: typeNames[idx]}) 
+   SET t.name = typeNames[idx]+"-"+t.cpu + "/"+t.ram+"/"+t.disk
+RETURN t.name, t.id, t.cpu, t.ram, t.disk;
+----
+
+=== Machines
+
+Each Rack contains 200 machines of the types we just introduced, so that in total we get 8000 servers in our datacenter.
+
+The distribution of the types is inverse to their capabilities.
+
+[source,cypher]
+----
+MATCH (t:Type)
+WITH collect(t) as types, 200 as machines
+
+MATCH (rack:Rack)-[:HOLDS]->(s:Switch)-[:ROUTES]->(si:Interface)
+
+UNWIND (range(1,machines)) AS machineid
+
+CREATE (rack)-[:HOLDS]->(m:Machine {id:rack.id * 1000 + machineid, name: rack.name + "-M-" +machineid })-[:ROUTES]->(i:Interface {ip:s.ip+"."+machineid})-[:CONNECTS]->(si)
+WITH m,types,size(types)-toInt(log(machines - machineid + 1)) -1 as idx
+WITH m, types[idx] as t
+CREATE (m)-[:TYPE]->(t);
+----
+
+=== Create OS and Software
+
+// https://en.wikipedia.org/wiki/Red_Hat_Enterprise_Linux#Version_history
+// https://wiki.ubuntu.com/Releases
+// https://en.wikipedia.org/wiki/Debian_version_history
+
+[source,cypher]
+----
+WITH
+     [{name:"RHEL",versions:["7.1","7.2","7.3"]},{name:"Ubuntu",versions:["14.04","16.04","16.10","17.04"]},{name:"Debian",versions:["6-Squeeze","7-Wheezy","8-Jessie"]}] as osNames,
+     [
+      {name:"java",versions:["8"]},
+      {name:"neo4j",ports:[7474,7473,7687],versions:["3.0","3.1"],dependencies:["java/8"]},
+      {name:"postgres",ports:[5432],versions:["9.4","9.5","9.6"]},
+      {name:"couchbase",ports:[8091,8092,11207,11209,11210,11211,11214,11215,18091,18092,4369],versions:["3.0","4.0","4.5","4.6"]},
+      {name:"elasticsearch",ports:[9200,9300,9500,9700],versions:["2.4","5.0","5.1","5.2"],dependencies:["java/8"]}
+     ] as services,
+     [{name:"webserver",ports:[80,443],dependencies:["postgres/9.4"]},
+      {name:"crm",ports:[80,443],dependencies:["java/8","neo4j/3.1"]},
+      {name:"cms",ports:[8080],dependencies:["php","webserver","couchbase"]},
+      {name:"webapp",ports:[8080],dependencies:["java","neo4j"]},
+      {name:"logstash",ports:[5000],dependencies:["elasticsearch/5.2"]}
+     ] as applications
+
+UNWIND osNames + services + applications AS sw
+
+CREATE (s:Software) SET s = sw
+FOREACH (sw in filter(x IN osNames where x.name = sw.name) | SET s:OS)
+FOREACH (sw in filter(x IN services where x.name = sw.name) | SET s:Service)
+FOREACH (sw in filter(x IN applications where x.name = sw.name) | SET s:Application)
+
+FOREACH (idx in range(0,size(coalesce(sw.versions,[]))-2) | 
+  MERGE (s)-[:VERSION]->(v0:Version {name:sw.versions[idx]})
+  MERGE (s)-[:VERSION]->(v:Version {name:sw.versions[idx+1]})
+  MERGE (v0)<-[:PREVIOUS]-(v)
+)
+WITH *
+UNWIND sw.dependencies as dep
+WITH *,split(dep,"/") as parts
+MERGE (d:Software {name:parts[0]})
+FOREACH (v IN case size(parts) when 1 then [] else [parts[1]] end |
+   MERGE (d)-[:VERSION]->(:Version {name:v})
+)
+WITH *
+OPTIONAL MATCH (d)-[:VERSION]->(v:Version {name:parts[1]})
+WITH s, coalesce(v,d) as d
+MERGE (s)-[:DEPENDS_ON]->(d);
+----
+
+=== Install Software
+
+[source,cypher]
+----
+create index on :Software(name);
+----
+
+[source,cypher]
+----
+profile 
+WITH [(:Software:OS)-[:VERSION]->(v) | v] as osVersions
+MATCH (a:Application:Software)
+WITH osVersions, collect(a) as apps
+MATCH (m:Machine)-[:ROUTES]->(i:Interface)
+WITH m,i, osVersions[toInt(rand()*size(osVersions))] as os, apps[toInteger(rand()*size(apps))] as app
+CREATE (m)-[:RUNS]->(op:OS:Process {name:os.name, startTime:timestamp() - toInteger( (rand() * 10 + 5) *24*3600*1000)})-[:INSTANCE]->(os)
+CREATE (m)-[:RUNS]->(ap:Application:Process {name: app.name, pid: toInt(rand()*10000), startTime:timestamp() - toInteger(rand() * 10*24*3600*1000) })-[:INSTANCE]->(app)
+
+FOREACH (portNo in app.ports |
+   MERGE (port:Port {port:portNo})<-[:EXPOSES]-(i)
+   CREATE (ap)-[:LISTENS]->(port)
+)
+WITH *
+MATCH (app)-[:DEPENDS_ON]->(dep)
+CREATE (m)-[:RUNS]->(dp:Service:Process {name: dep.name, pid: toInt(rand()*10000), startTime:timestamp() - toInteger(rand() * 10*24*3600*1000) })-[:INSTANCE]->(dep)
+CREATE (ap)-[:DEPENDS_ON]->(dp)
+FOREACH (portNo in dep.ports |
+   MERGE (port:Port {port:portNo})<-[:EXPOSES]-(i)
+   CREATE (dp)-[:LISTENS]->(port)
+)
+----
+
+////
+
+////
+<ul class="graph-diagram-markup" data-internal-scale="1" data-external-scale="1">
+  <li class="node" data-node-id="0" data-x="748.39697265625" data-y="455.04269239714677">
+    <span class="caption">DataCenter</span>
+  </li>
+  <li class="node" data-node-id="1" data-x="492.0865987929767" data-y="392.0816647001325">
+    <span class="caption">Router Egress</span>
+  </li>
+  <li class="node" data-node-id="2" data-x="257.2949016875158" data-y="323.6644243122581">
+    <span class="caption">Interface</span>
+  </li>
+  <li class="node" data-node-id="3" data-x="446.7050983124842" data-y="133.45305006177512">
+    <span class="caption">Network Zone</span>
+  </li>
+  <li class="node" data-node-id="4" data-x="560.123707931625" data-y="254.73773125573348">
+    <span class="caption">Router</span>
+  </li>
+  <li class="node" data-node-id="5" data-x="335.3692092895508" data-y="603.2259216308596">
+    <span class="caption">Rack</span>
+  </li>
+  <li class="node" data-node-id="6" data-x="335.3692092895508" data-y="425.02456766718086">
+    <span class="caption">Switch</span>
+  </li>
+  <li class="node" data-node-id="7" data-x="56.87939429489836" data-y="475.5839886370909">
+    <span class="caption">Machine</span>
+  </li>
+  <li class="node" data-node-id="8" data-x="56.87939429489836" data-y="603.2259216308596">
+    <span class="caption">Type</span>
+  </li>
+  <li class="node" data-node-id="9" data-x="-216.70517953512513" data-y="133.45305006177512">
+    <span class="caption">Software Application</span>
+  </li>
+  <li class="node" data-node-id="10" data-x="-372.80743408203125" data-y="540.8767056170702">
+    <span class="caption">Software Service</span>
+  </li>
+  <li class="node" data-node-id="11" data-x="-133.572824798797" data-y="455.04269239714677">
+    <span class="caption">Service Process</span>
+  </li>
+  <li class="node" data-node-id="12" data-x="19.093089179726576" data-y="158.05047621080348">
+    <span class="caption">Application Process</span>
+  </li>
+  <li class="node" data-node-id="13" data-x="-618.25092609379" data-y="718.3084683123827">
+    <span class="caption">Software OS</span>
+  </li>
+  <li class="node" data-node-id="14" data-x="-513.9067387539527" data-y="455.04269239714677">
+    <span class="caption">Version</span>
+  </li>
+  <li class="node" data-node-id="15" data-x="-295.8774871826172" data-y="749.2848510742197">
+    <span class="caption">OS Process</span>
+  </li>
+  <li class="node" data-node-id="16" data-x="-597.8898012617423" data-y="367.51716817127544">
+    <span class="caption">Software</span>
+  </li>
+  <li class="node" data-node-id="17" data-x="112.93163498725244" data-y="254.73773125573348">
+    <span class="caption">Port</span>
+  </li>
+  <li class="relationship" data-from="0" data-to="1">
+    <span class="type">CONTAINS</span>
+  </li>
+  <li class="relationship" data-from="1" data-to="2">
+    <span class="type">ROUTES</span>
+  </li>
+  <li class="relationship" data-from="2" data-to="3">
+    <span class="type">CONNECTS</span>
+  </li>
+  <li class="relationship" data-from="0" data-to="4">
+    <span class="type">CONTAINS</span>
+  </li>
+  <li class="relationship" data-from="4" data-to="2">
+    <span class="type">ROUTES</span>
+  </li>
+  <li class="relationship" data-from="0" data-to="5">
+    <span class="type">CONTAINS</span>
+  </li>
+  <li class="relationship" data-from="5" data-to="6">
+    <span class="type">HOLDS</span>
+  </li>
+  <li class="relationship" data-from="3" data-to="2">
+    <span class="type">ROUTES</span>
+  </li>
+  <li class="relationship" data-from="6" data-to="2">
+    <span class="type">ROUTES</span>
+  </li>
+  <li class="relationship" data-from="7" data-to="8">
+    <span class="type">TYPE</span>
+  </li>
+  <li class="relationship" data-from="5" data-to="7">
+    <span class="type">HOLDS</span>
+  </li>
+  <li class="relationship" data-from="7" data-to="2">
+    <span class="type">ROUTES</span>
+  </li>
+  <li class="relationship" data-from="9" data-to="10">
+    <span class="type">DEPENDS_ON</span>
+  </li>
+  <li class="relationship" data-from="11" data-to="10">
+    <span class="type">INSTANCE</span>
+  </li>
+  <li class="relationship" data-from="11" data-to="9">
+    <span class="type">INSTANCE</span>
+  </li>
+  <li class="relationship" data-from="12" data-to="9">
+    <span class="type">INSTANCE</span>
+  </li>
+  <li class="relationship" data-from="13" data-to="14">
+    <span class="type">VERSION</span>
+  </li>
+  <li class="relationship" data-from="15" data-to="14">
+    <span class="type">INSTANCE</span>
+  </li>
+  <li class="relationship" data-from="10" data-to="14">
+    <span class="type">VERSION</span>
+  </li>
+  <li class="relationship" data-from="9" data-to="14">
+    <span class="type">DEPENDS_ON</span>
+  </li>
+  <li class="relationship" data-from="11" data-to="14">
+    <span class="type">INSTANCE</span>
+  </li>
+  <li class="relationship" data-from="9" data-to="16">
+    <span class="type">DEPENDS_ON</span>
+  </li>
+  <li class="relationship" data-from="11" data-to="16">
+    <span class="type">INSTANCE</span>
+  </li>
+  <li class="relationship" data-from="10" data-to="14">
+    <span class="type">DEPENDS_ON</span>
+  </li>
+  <li class="relationship" data-from="7" data-to="15">
+    <span class="type">RUNS</span>
+  </li>
+  <li class="relationship" data-from="7" data-to="12">
+    <span class="type">RUNS</span>
+  </li>
+  <li class="relationship" data-from="12" data-to="17">
+    <span class="type">LISTENS</span>
+  </li>
+  <li class="relationship" data-from="2" data-to="17">
+    <span class="type">EXPOSES</span>
+  </li>
+  <li class="relationship" data-from="7" data-to="11">
+    <span class="type">RUNS</span>
+  </li>
+  <li class="relationship" data-from="11" data-to="17">
+    <span class="type">LISTENS</span>
+  </li>
+</ul>
+////

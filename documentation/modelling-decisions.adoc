@@ -1,0 +1,85 @@
+== Network Management - Introduction
+:neo4j-version: 3.0
+:author: Michael Hunger
+:tags: network-mgt,it-operations,datacenter
+:images: https://dl.dropboxusercontent.com/u/14493611
+:images: {img}
+:experimental:
+
+Computer networks span all levels of the stack from physical connections up to mobile and web-applications connecting networks of users.
+
+Graph Databases offer a natural way of modelling, storing and querying all these types of computer networks.
+
+A graph database like Neo4j can be utilized for:
+
+* Configuration Management
+* Impact Analysis
+* Planning
+* Security and Hardening of Networks
+* Intrusion Detection
+* Traffic Analytics
+* Analytics of user behavior
+
+In this example we want to look at Network Management and Impact Analysis from the level of routing (TCP/IP) upwards to managing applications and tracing their dependencies.
+
+In this guide we are going to look at:
+* setting the scene 
+* outlining the questions we are looking to ask
+* describing the modelling decisions taken.
+
+== Setting the Scene
+
+Imagine we have a `DataCenter` connected to an Interconnect via an `Egress Router`.
+The datacenter uses a `10.x.x.x/8` IP address range.
+
+The DataCenter consists of several Zones which are connected to the main backbone each via a `Router` (10.zone.*/16).
+
+From there each zone is broken down into rows of `Racks`.
+
+Each `Rack` contains different types of `Servers` and has its own `Switch` to connect to the datacenter routers backplane.
+
+Each `Server` has external network `Interfaces` that connect to the rack switch, the local networks being `10.zone.rack.*/24`.
+
+Each machine either runs a real Operating System (`OS`) or a Virtualization Manager that runs a number of Virtual Machines.
+
+For operational simplicity we only run one `Application` per OS which uses a number of `Ports` on the external interface.
+
+The datacenter consists of 4 zones, each of which has its own separate `Network` `10.zone.*/16`, and it's own `Router`.
+
+Each zone contains 10 `Racks`, each of which has it's own `Switch` and subnet with an IP like this pattern `10.zone.rack.*/24`.
+
+Each Rack contains 200 machines of the types we just introduced, so that in total we get 8000 servers in our datacenter.
+
+Each machine runs software. For our software we differentiate between `Operating Systems, Services and Applications` (which could also be micro services). Each of them has a name, version(s) and dependencies.
+
+Each of our machines is set up to run an OS and a single application, each of which might require other dependencies that are also installed.
+
+== Questions to ask
+
+We previously set the scene with the types of devices we're looking to include in the scope of our domain. To be able to determine the best-suited data model for this domain, we also need to consider the types of questions we want to ask. In this Network Management example, we want to understand aspects around connectivity, impact analysis, configuration management and so forth.
+
+To enable this, the types of questions we look to answer in this example are:
+* Paths between specific data centers to interfaces, routers and network zones
+* Find the shortest paths between certain devices
+* Find the impact on network routing when a device goes down
+* Explore the contents of a Rack
+* Determine the distribution of machine types across a datacenter
+* Determine dependencies on software and specific software versions
+
+== Modeling
+
+Based on the scene setting of the Network Management domain, along with some sample questions, we can start to make some decisions about what the data model will look like. Each of the elements in our datacenter (and the datacenter itself) are being referenced to as potential anchor points. This would make it a sensible decision for each of these elements to be Nodes in their own right. As elements such as operating system and software are also being queried (and dependencies), these are also going to be Nodes rather than the properties on a Machine node. 
+
+Properties used will either describe the names of datacenters of software, or have the IP address for a network device.
+
+We can model the network endpoints (boxes like servers, routers, firewalls, racks) of the data center as nodes and the "cables" between them as relationships.
+
+Another type of node represent networks and interfaces.
+
+On the application level we have the operating system, virtual machines, application and services that are modeled as entities.
+
+This is the full data model of your graph.
+
+image::{images}/network-schema-arrows.jpg[float=right]
+
+
