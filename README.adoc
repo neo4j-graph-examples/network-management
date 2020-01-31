@@ -3,7 +3,7 @@
 //graph example description
 :description: Dependency and root cause analysis and more for network and IT management
 //icon representing graph example
-:icon: resources/network.svg
+:icon: /resources/network.svg
 //associated search tags, separate multiple tags with comma
 :tags: network-mgt,it-operations,datacenter
 //graph example author
@@ -23,6 +23,8 @@
 :guide: documentation/network-management.adoc
 //guide for modelling decisions. Should be friendly enough to be converted into various document formats
 :model-guide: documentation/modelling-decisions.adoc
+
+image::{icon}[]
 
 = {name} Graph Example
 
