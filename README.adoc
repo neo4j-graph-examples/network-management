@@ -9,7 +9,7 @@
 //graph example author
 :author: Michael Hunger
 //use a script to generate/process data? Set to either path for script, or false if not used
-:use-load-script: scripts/network-management.cypher
+:use-load-script: /scripts/network-management.cypher
 //use a graph dump file for initial data set? Set to either path for dump file, or false if not used
 :use-dump-file: false
 //use a plugin for the database, separate multiple plugins with comma. 'public' plugins are apoc, graph-algorithms. 
@@ -20,9 +20,11 @@
 //specify a Bloom perspective, or false if not used
 :bloom-perspective: resources/network-management.json
 //guide for the graph example. Should be friendly enough to be converted into various document formats
-:guide: documentation/network-management.adoc
+:guide: /documentation/network-management.adoc
+//temporary for rendered guides
+:rendered-guide: https://guides.neo4j.com/sandbox/network-management/index.html
 //guide for modelling decisions. Should be friendly enough to be converted into various document formats
-:model-guide: documentation/modelling-decisions.adoc
+:model-guide: /documentation/modelling-decisions.adoc
 
 image::{icon}[]
 
@@ -36,4 +38,4 @@ This is for version: {target-db-version}
 
 unrendered guide:{guide}
 
-rendered guide available from: 
+rendered guide available from: {rendered-guide}
