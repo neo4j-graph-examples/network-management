@@ -1,5 +1,6 @@
 //name of the graph example
-:name: Network Management
+:name: network-management
+:long-name: Network Management
 //graph example description
 :description: Dependency and root cause analysis and more for network and IT management
 //icon representing graph example
