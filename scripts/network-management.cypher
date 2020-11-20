@@ -1,39 +1,29 @@
 // Data Center
-
 CREATE (dc:DataCenter {name:"DC1",location:"Iceland, Rekjavik"})-[:CONTAINS]->(re:Router:Egress {name:"DC1-RE"})
 CREATE (re)-[:ROUTES]->(:Interface {ip:"10.0.0.254"});
 
 // Zones
 // The datacenter consists of 4 zones, each of which has it's own separate `Network` `10.zone.*/16`, and it's own `Router`.
-
-
 WITH 4 AS zones
 MATCH (dc:DataCenter {name:"DC1"})-[:CONTAINS]->(re:Router:Egress)-[:ROUTES]->(rei:Interface)
-
 // for each zone
 WITH * UNWIND range(1,zones) AS zid
-
 // create zone network
 CREATE (nr:Network:Zone {ip:"10."+zid, size: 16, zone:zid})<-[:CONNECTS]-(rei)
-
 // create router in DC, connect it via an interface to the zone network
 CREATE (dc)-[:CONTAINS]->(r:Router {name:"DC1-R-"+zid, zone:zid})-[:ROUTES]->(ri:Interface {ip:nr.ip+".0.254"})-[:CONNECTS]->(nr);
 
 
 // Racks
-
 WITH 10 as racks
 MATCH (dc:DataCenter {name:"DC1"})
 MATCH (nr:Network:Zone) // one per zone
 
 WITH * UNWIND range(1,racks) AS rackid
-
 CREATE (dc)-[:CONTAINS]->(rack:Rack {name:"DC1-RCK-"+nr.zone+"-"+rackid, rack:rackid, zone:nr.zone})-[:HOLDS]->(s:Switch {ip:nr.ip+"."+rackid, rack:rackid})-[:ROUTES]->(si:Interface {ip:s.ip+".254"})<-[:ROUTES]-(nr);
 
 // Machine types
-
 // Similar to the machines you can rent on AWS we use machine types, for which we auto-create some reasonable capacities for CPU, RAM and DISK.
-
 WITH ["xs","s","m","l","xl","xxl"] as typeNames
 UNWIND range(0,size(typeNames)-1) as idx
 CREATE (t:Type {id:idx, cpu: toInteger(2^idx), ram:toInteger(4^idx), disk:toInteger(5^idx), type: typeNames[idx]}) 
@@ -42,30 +32,23 @@ RETURN t.name, t.id, t.cpu, t.ram, t.disk;
 
 
 // Machines
-
 // Each Rack contains 200 machines of the types we just introduced, so that in total we get 8000 servers in our datacenter.
 // The distribution of the types is inverse to their capabilities.
-
 MATCH (t:Type)
 WITH collect(t) as types, 200 as machines
 
 MATCH (rack:Rack)-[:HOLDS]->(s:Switch)-[:ROUTES]->(si:Interface)
 
 UNWIND (range(1,machines)) AS machineid
-
 CREATE (rack)-[:HOLDS]->(m:Machine {id:rack.id * 1000 + machineid, name: rack.name + "-M-" +machineid })-[:ROUTES]->(i:Interface {ip:s.ip+"."+machineid})-[:CONNECTS]->(si)
 WITH m,types,size(types)-toInteger(log(machines - machineid + 1)) -1 as idx
 WITH m, types[idx] as t
 CREATE (m)-[:TYPE]->(t);
 
-
 // Create OS and Software
-
 // https://en.wikipedia.org/wiki/Red_Hat_Enterprise_Linux#Version_history
 // https://wiki.ubuntu.com/Releases
 // https://en.wikipedia.org/wiki/Debian_version_history
-
-
 WITH
      [{name:"RHEL",versions:["7.1","7.2","7.3"]},{name:"Ubuntu",versions:["14.04","16.04","16.10","17.04"]},{name:"Debian",versions:["6-Squeeze","7-Wheezy","8-Jessie"]}] as osNames,
      [
@@ -81,7 +64,6 @@ WITH
       {name:"webapp",ports:[8080],dependencies:["java","neo4j"]},
       {name:"logstash",ports:[5000],dependencies:["elasticsearch/5.2"]}
      ] as applications
-
 UNWIND osNames + services + applications AS sw
 
 CREATE (s:Software) SET s = sw
@@ -108,7 +90,6 @@ MERGE (s)-[:DEPENDS_ON]->(d);
 
 
 // Install Software
-
 create index on :Software(name);
 
 WITH [(:Software:OS)-[:VERSION]->(v) | v] as osVersions
