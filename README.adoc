@@ -13,6 +13,7 @@
 :bloom-perspective: bloom/network-management.bloom-perspective
 :guide: documentation/network-management.neo4j-browser-guide
 :rendered-guide: https://guides.neo4j.com/sandbox/network-management/index.html
+:model: documentation/img/model.png
 :example: documentation/img/example.png
 
 :query: MATCH (dc:DataCenter {location: $location})-[:CONTAINS]->(r:Router)-[:ROUTES]->(i:Interface) +
@@ -27,7 +28,7 @@ RETURN i.ip as ip +
 :todo: 
 image::{logo}[width=100]
 
-== {long_name} Graph Example
+== {long-name} Graph Example
 
 Description: _{description}_
 
