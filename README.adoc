@@ -26,7 +26,7 @@ RETURN i.ip as ip +
 :expected-result: 10.0.0.254
 
 :model-guide: documentation/modelling-decisions.adoc
-:todo: 
+:todo: false
 image::{icon}[width=100]
 
 == {long-name} Graph Example
