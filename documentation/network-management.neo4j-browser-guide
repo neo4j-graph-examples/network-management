@@ -57,7 +57,7 @@ If you want to see it yourself, run
 
 [source,cypher]
 ----
-CALL db.schema()
+call db.schema.visualization()
 ----
 
 Imagine we have a `DataCenter` connected to an Interconnect via an `Egress Router`.
@@ -180,7 +180,7 @@ If we look now at the overall connections we need to use shortest-paths which re
 .Connectivity before: 40 routes a 5 hops
 [source,cypher]
 ----
-MATCH path = allShortestPaths( (rack:Rack)-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress) )
+MATCH path = allShortestPaths( (rack:Rack)-[:HOLDS|ROUTES|CONNECTS*]-(router:Router:Egress) )
 RETURN length(path) as hops, count(*) as count;
 ----
 
@@ -198,7 +198,7 @@ Connectivity after: 39 routes a 5 hops
 
 [source,cypher]
 ----
-MATCH path = allShortestPaths( (rack:Rack)-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress) )
+MATCH path = allShortestPaths( (rack:Rack)-[:HOLDS|ROUTES|CONNECTS*]-(router:Router:Egress) )
 RETURN length(path) as hops, count(*) as count;
 ----
 
@@ -206,7 +206,7 @@ Now all the machines in that Rack are cut off, no connection anymore, which we c
 
 [source,cypher]
 ----
-MATCH connection = allShortestPaths( (rack:Rack {name:"DC1-RCK-1-1"})-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress) )
+MATCH connection = allShortestPaths( (rack:Rack {name:"DC1-RCK-1-1"})-[:HOLDS|ROUTES|CONNECTS*]-(router:Router:Egress) )
 RETURN connection;
 ----
 
@@ -226,7 +226,7 @@ MERGE (si)<-[:ROUTES]-(nr);
 
 [source,cypher]
 ----
-MATCH path = allShortestPaths((rack:Rack)-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress))
+MATCH path = allShortestPaths((rack:Rack)-[:HOLDS|ROUTES|CONNECTS*]-(router:Router:Egress))
 RETURN length(path) as hops, count(*) as count;
 ----
 
@@ -253,7 +253,7 @@ But that Rack is now still connected with 3 alternative routes.
 
 [source,cypher]
 ----
-MATCH path = allShortestPaths((rack:Rack {zone:1,rack:1})-[:HOLDS|:ROUTES|:CONNECTS*]-(router:Router:Egress))
+MATCH path = allShortestPaths((rack:Rack {zone:1,rack:1})-[:HOLDS|ROUTES|CONNECTS*]-(router:Router:Egress))
 RETURN path;
 ----
 
