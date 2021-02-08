@@ -163,14 +163,6 @@ MATCH (dc:DataCenter {name:"DC1"})-[:CONTAINS]->(rack:Rack)-[:HOLDS]->(s:Switch)
 RETURN *;
 ----
 
-Now our network has grown quite a bit:
-
-[source,cypher]
-----
-MATCH network = (dc:DataCenter)-[*6]-(:Rack)
-RETURN network;
-----
-
 == Network Connectivity
 
 Now we could already have a look at the network connectivity in our datacenter.
@@ -431,7 +423,7 @@ Similar for our other software
 MATCH (s:Software) WHERE not s:OS
 OPTIONAL MATCH (s)-[:VERSION]->(v) 
 OPTIONAL MATCH (s)-[:DEPENDS_ON]->(dv)<-[:VERSION]-(d)
-RETURN s.name, collect(v.name) as versions, filter(x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL) as dependencies, s.ports;
+RETURN s.name, collect(v.name) as versions, [x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL] as dependencies, s.ports;
 ----
 
 == Software: Running on Machines
@@ -598,7 +590,7 @@ MATCH (target)-[:ROUTES]->(ti:Interface)-[:EXPOSES]->(tp:Port)<-[:LISTENS]-(targ
 WITH source,si,sp, sourceAppProcess,sourceApp,target,ti,head(collect(tp)) as tp, targetAppProcess, targetApp
 // todo limit to first port
 RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
-        connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInt(rand()*1000))+"@"+source.name, 
+        connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInteger(rand()*1000))+"@"+source.name, 
         time:timestamp(), packets: 1, mtu: 1500 }} as event
 ----
 
@@ -620,7 +612,7 @@ RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.
 
 [source, cypher]
 ----
-UNWIND {events} AS event
+UNWIND $events AS event
 WITH event WHERE event.type = 'OpenConnection'
 
 MERGE (si:Interface {ip:event.source.ip})
@@ -630,7 +622,8 @@ MERGE (ti:Interface {ip:event.target.ip})
 MERGE (ti)-[:LISTENS]->(tp:Port {port:event.target.port})
 
 CREATE (sp)<-[:FROM]-(c:Connection {id:event.id})–[:TO]->(tp)
-SET c += event.connection // type, timestamp, user-info, ...
+SET c += event.connection // timestamp, user-info, ...
+SET c.type = event.type
 MERGE (si)-[cstats:CONNECTIONS]->(ti)
 SET si.count = coalesce(si.count,0) + 1
 SET si.packets = coalesce(si.packets,0) + event.packets
