@@ -674,7 +674,7 @@ WITH s.name as software, v.name as version, timestamp() - sp.startTime as runtim
 RETURN software, version, count(*) as instances, { min: min(runtime), max: max(runtime), avg:avg(runtime) } as runtime
 ----
 
-=== Data Transer Volume between Interfaces
+=== Data Transfer Volume between Interfaces
 
 // todo add durations of connections
 
