@@ -17,14 +17,6 @@
 :model: documentation/img/model.png
 :example: documentation/img/example.png
 
-:query: MATCH (dc:DataCenter {location: $location})-[:CONTAINS]->(r:Router)-[:ROUTES]->(i:Interface) +
-RETURN i.ip as ip +
-
-:param-name: location
-:param-value: Iceland, Rekjavik
-:result-column: ip
-:expected-result: 10.0.0.254
-
 :model-guide: documentation/modelling-decisions.adoc
 :todo: false
 image::{icon}[width=100]
@@ -44,9 +36,10 @@ image::{model}[]
 image::{example}[width=600]
 
 .Example Query:
-[source,cypher,subs=attributes]
+[source,cypher,role=query-example,param-name=location,param-value="Iceland, Rekjavik",result-column=ip,expected-result=10.0.0.254]
 ----
-{query}
+MATCH (dc:DataCenter {location: $location})-[:CONTAINS]->(r:Router)-[:ROUTES]->(i:Interface)
+RETURN i.ip as ip
 ----
 
 === Setup
