@@ -36,7 +36,7 @@ image::{model}[]
 image::{example}[width=600]
 
 .Example Query:
-[source,cypher,role=query-example,param-name=location,param-value='Iceland, Rekjavik',result-column=ip,expected-result=10.0.0.254]
+[source,cypher,role=query-example,param-name=location,param-value="Iceland, Rekjavik",result-column=ip,expected-result=10.0.0.254]
 ----
 MATCH (dc:DataCenter {location: $location})-[:CONTAINS]->(r:Router)-[:ROUTES]->(i:Interface)
 RETURN i.ip as ip
