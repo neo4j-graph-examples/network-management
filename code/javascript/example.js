@@ -11,7 +11,7 @@ const query =
   RETURN i.ip as ip
   `;
 
-const params = {"location": "Iceland, Rekjavik"};
+const params = {"location": "Iceland"};
 
 const session = driver.session({database:"neo4j"});
 
