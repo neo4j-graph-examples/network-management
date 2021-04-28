@@ -22,7 +22,7 @@ public class Example {
 
       var result = session.readTransaction(
         tx -> tx.run(cypherQuery, 
-                parameters("location","Iceland, Rekjavik"))
+                parameters("location","Iceland"))
             .list());
 
       for (Record record : result) {

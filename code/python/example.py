@@ -15,7 +15,7 @@ RETURN i.ip as ip
 with driver.session(database="neo4j") as session:
   results = session.read_transaction(
     lambda tx: tx.run(cypher_query,
-                      location="Iceland, Rekjavik").data())
+                      location="Iceland").data())
   for record in results:
     print(record['ip'])
 
