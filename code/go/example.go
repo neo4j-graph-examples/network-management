@@ -33,7 +33,7 @@ func runQuery(uri, database, username, password string) (result []string, err er
 			MATCH (dc:DataCenter {location: $location})-[:CONTAINS]->(r:Router)-[:ROUTES]->(i:Interface)
 			RETURN i.ip as ip
 			`, map[string]interface{}{
-				"location": "Iceland, Rekjavik",
+				"location": "Iceland",
 			})
 		if err != nil {
 			return nil, err
