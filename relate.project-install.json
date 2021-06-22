@@ -8,6 +8,13 @@
       },
       {
           "dumpFile": "data/network-management-40.dump",
+          "targetNeo4jVersion": "4.0.* - 4.2.*"
+      },
+      {
+          "dumpFile": "data/network-management-43.dump",
+          "targetNeo4jVersion": "^4.3"
+      },
+      {
           "scriptFile":"scripts/network-management.cypher",
           "targetNeo4jVersion": "^4.0"
       }
