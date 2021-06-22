@@ -431,7 +431,7 @@ Similar for our other software
 MATCH (s:Software) WHERE not s:OS
 OPTIONAL MATCH (s)-[:VERSION]->(v) 
 OPTIONAL MATCH (s)-[:DEPENDS_ON]->(dv)<-[:VERSION]-(d)
-RETURN s.name, collect(v.name) as versions, filter(x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL) as dependencies, s.ports;
+RETURN s.name, collect(v.name) as versions, [x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL] as dependencies, s.ports;
 ----
 
 == Software: Running on Machines
@@ -598,7 +598,7 @@ MATCH (target)-[:ROUTES]->(ti:Interface)-[:EXPOSES]->(tp:Port)<-[:LISTENS]-(targ
 WITH source,si,sp, sourceAppProcess,sourceApp,target,ti,head(collect(tp)) as tp, targetAppProcess, targetApp
 // todo limit to first port
 RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
-        connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInt(rand()*1000))+"@"+source.name, 
+        connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInteger(rand()*1000))+"@"+source.name, 
         time:timestamp(), packets: 1, mtu: 1500 }} as event
 ----
 
@@ -620,7 +620,7 @@ RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.
 
 [source, cypher]
 ----
-UNWIND {events} AS event
+UNWIND $events AS event
 WITH event WHERE event.type = 'OpenConnection'
 
 MERGE (si:Interface {ip:event.source.ip})
@@ -787,7 +787,7 @@ Similar to the machines you can rent on AWS we use machine types, for which we a
 ----
 WITH ["xs","s","m","l","xl","xxl"] as typeNames
 UNWIND range(0,size(typeNames)-1) as idx
-CREATE (t:Type {id:idx, cpu: toInt(2^idx), ram:toInt(4^idx), disk:toInt(5^idx), type: typeNames[idx]}) 
+CREATE (t:Type {id:idx, cpu: toInteger(2^idx), ram:toInteger(4^idx), disk:toInteger(5^idx), type: typeNames[idx]}) 
    SET t.name = typeNames[idx]+"-"+t.cpu + "/"+t.ram+"/"+t.disk
 RETURN t.name, t.id, t.cpu, t.ram, t.disk;
 ----
@@ -808,7 +808,7 @@ MATCH (rack:Rack)-[:HOLDS]->(s:Switch)-[:ROUTES]->(si:Interface)
 UNWIND (range(1,machines)) AS machineid
 
 CREATE (rack)-[:HOLDS]->(m:Machine {id:rack.id * 1000 + machineid, name: rack.name + "-M-" +machineid })-[:ROUTES]->(i:Interface {ip:s.ip+"."+machineid})-[:CONNECTS]->(si)
-WITH m,types,size(types)-toInt(log(machines - machineid + 1)) -1 as idx
+WITH m,types,size(types)-toInteger(log(machines - machineid + 1)) -1 as idx
 WITH m, types[idx] as t
 CREATE (m)-[:TYPE]->(t);
 ----
@@ -876,9 +876,9 @@ WITH [(:Software:OS)-[:VERSION]->(v) | v] as osVersions
 MATCH (a:Application:Software)
 WITH osVersions, collect(a) as apps
 MATCH (m:Machine)-[:ROUTES]->(i:Interface)
-WITH m,i, osVersions[toInt(rand()*size(osVersions))] as os, apps[toInteger(rand()*size(apps))] as app
+WITH m,i, osVersions[toInteger(rand()*size(osVersions))] as os, apps[toInteger(rand()*size(apps))] as app
 CREATE (m)-[:RUNS]->(op:OS:Process {name:os.name, startTime:timestamp() - toInteger( (rand() * 10 + 5) *24*3600*1000)})-[:INSTANCE]->(os)
-CREATE (m)-[:RUNS]->(ap:Application:Process {name: app.name, pid: toInt(rand()*10000), startTime:timestamp() - toInteger(rand() * 10*24*3600*1000) })-[:INSTANCE]->(app)
+CREATE (m)-[:RUNS]->(ap:Application:Process {name: app.name, pid: toInteger(rand()*10000), startTime:timestamp() - toInteger(rand() * 10*24*3600*1000) })-[:INSTANCE]->(app)
 
 FOREACH (portNo in app.ports |
    MERGE (port:Port {port:portNo})<-[:EXPOSES]-(i)
@@ -886,7 +886,7 @@ FOREACH (portNo in app.ports |
 )
 WITH *
 MATCH (app)-[:DEPENDS_ON]->(dep)
-CREATE (m)-[:RUNS]->(dp:Service:Process {name: dep.name, pid: toInt(rand()*10000), startTime:timestamp() - toInteger(rand() * 10*24*3600*1000) })-[:INSTANCE]->(dep)
+CREATE (m)-[:RUNS]->(dp:Service:Process {name: dep.name, pid: toInteger(rand()*10000), startTime:timestamp() - toInteger(rand() * 10*24*3600*1000) })-[:INSTANCE]->(dep)
 CREATE (ap)-[:DEPENDS_ON]->(dp)
 FOREACH (portNo in dep.ports |
    MERGE (port:Port {port:portNo})<-[:EXPOSES]-(i)

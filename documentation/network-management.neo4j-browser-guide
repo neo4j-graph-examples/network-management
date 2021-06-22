@@ -583,7 +583,7 @@ ORDER BY os, version;<!--/code--></pre>
 <pre mode="cypher"  class="highlight pre-scrollable programlisting cm-s-neo code runnable standalone-example ng-binding" data-lang="cypher" lang="cypher"><!--code class="cypher language-cypher"-->MATCH (s:Software) WHERE not s:OS
 OPTIONAL MATCH (s)-[:VERSION]-&gt;(v)
 OPTIONAL MATCH (s)-[:DEPENDS_ON]-&gt;(dv)&lt;-[:VERSION]-(d)
-RETURN s.name, collect(v.name) as versions, filter(x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL) as dependencies, s.ports;<!--/code--></pre>
+RETURN s.name, collect(v.name) as versions, [x IN collect([d.name,dv.name]) WHERE x[0] IS NOT NULL] as dependencies, s.ports;<!--/code--></pre>
 </div>
 </div>
 	</div>
