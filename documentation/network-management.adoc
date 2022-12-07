@@ -597,7 +597,7 @@ WITH target, source,si,head(collect(sp)) as sp, sourceAppProcess,sourceApp
 MATCH (target)-[:ROUTES]->(ti:Interface)-[:EXPOSES]->(tp:Port)<-[:LISTENS]-(targetAppProcess)-[:INSTANCE]->(targetApp)
 WITH source,si,sp, sourceAppProcess,sourceApp,target,ti,head(collect(tp)) as tp, targetAppProcess, targetApp
 // todo limit to first port
-RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
+RETURN {id: randomUUID(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
         connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInteger(rand()*1000))+"@"+source.name, 
         time:timestamp(), packets: 1, mtu: 1500 }} as event
 ----

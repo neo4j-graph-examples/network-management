@@ -4,23 +4,27 @@
     "dbms": [
       {
           "dumpFile": "data/network-management-35.dump",
-          "targetNeo4jVersion":"3.5",
+          "targetNeo4jVersion":">=3.5.0 <4.0.0",
           "plugins": ["apoc"]
       },
       {
           "dumpFile": "data/network-management-40.dump",
-          "targetNeo4jVersion": "4.0.* - 4.2.*",
+          "targetNeo4jVersion": ">=4.0.0 <4.3.0",
           "plugins": ["apoc"]
       },
       {
           "dumpFile": "data/network-management-43.dump",
-          "targetNeo4jVersion": "^4.3",
+          "targetNeo4jVersion": ">=4.3.0 <5.0.0",
+          "plugins": ["apoc"]
+      },
+      {
+          "dumpFile": "data/network-management-50.dump",
+          "targetNeo4jVersion": ">=5.0.0 <6.0.0",
           "plugins": ["apoc"]
       },
       {
           "scriptFile":"scripts/network-management.cypher",
-          "targetNeo4jVersion": "^4.0",
-          "plugins": ["apoc"]
+          "targetNeo4jVersion": ">=4.0.0 <6.0.0"
       }
   ]
 }

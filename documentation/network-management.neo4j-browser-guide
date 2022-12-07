@@ -6,7 +6,7 @@
 */	
 @import url("//maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css");
 
-.imageblock .content img, .image img {max-width: 900px;max-height: 300px;}
+.imageblock .content img, .image img {max-width: 100%;}
 .deck h3, .deck h4 {display: block !important;margin-bottom:8px;margin-top:5px;}
 .listingblock {margin:8px;}
 .pull-bottom {position:relative;bottom:1em;}
@@ -107,7 +107,7 @@
     <div>
       <div class="imageblock" style="float: right;">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/Network-Management-Model.svg" alt="Network Management Model" width="700">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/Network-Management-Model.svg" alt="Network Management Model" width="700">
 </div>
 </div>
 <div class="paragraph">
@@ -138,7 +138,7 @@
 </div>
 <div class="imageblock" style="float: right;">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-schema-arrows.jpg" alt="network schema arrows">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-schema-arrows.jpg" alt="network schema arrows">
 </div>
 </div>
 <div class="paragraph">
@@ -198,7 +198,7 @@ RETURN network;<!--/code--></pre>
 </div>
 <div class="imageblock" style="float: right;">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-zones.jpg" alt="network zones">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-zones.jpg" alt="network zones">
 </div>
 </div>
 <div class="paragraph">
@@ -269,7 +269,7 @@ RETURN nr.ip as network_ip, ri.ip as router_if_ip, r.name as router, r.zone as z
     <div>
       <div class="imageblock" style="float: right;">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-rack.jpg" alt="network rack" width="600">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-rack.jpg" alt="network rack" width="600">
 </div>
 </div>
 <div class="paragraph">
@@ -280,6 +280,15 @@ RETURN nr.ip as network_ip, ri.ip as router_if_ip, r.name as router, r.zone as z
 <pre mode="cypher"  class="highlight pre-scrollable programlisting cm-s-neo code runnable standalone-example ng-binding" data-lang="cypher" lang="cypher"><!--code class="cypher language-cypher"-->MATCH (dc:DataCenter {name:"DC1"})-[:CONTAINS]-&gt;(rack:Rack)-[:HOLDS]-&gt;(s:Switch)-[:ROUTES]-&gt;(si:Interface)&lt;-[:ROUTES]-(nr:Network:Zone)
 
 RETURN *;<!--/code--></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Now our network has grown quite a bit:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre mode="cypher"  class="highlight pre-scrollable programlisting cm-s-neo code runnable standalone-example ng-binding" data-lang="cypher" lang="cypher"><!--code class="cypher language-cypher"-->MATCH network = (dc:DataCenter)-[*6]-(:Rack)
+RETURN network;<!--/code--></pre>
 </div>
 </div>
 	</div>
@@ -368,7 +377,7 @@ RETURN length(path) as hops, count(*) as count;<!--/code--></pre>
 </div>
 <div class="imageblock" style="float: right;">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-alternative-routes.jpg" alt="network alternative routes">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-alternative-routes.jpg" alt="network alternative routes">
 </div>
 </div>
 <div class="paragraph">
@@ -454,12 +463,12 @@ RETURN t.name, t.id, t.cpu, t.ram, t.disk;<!--/code--></pre>
 </div>
 <div class="imageblock">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-8000-machines.jpg" alt="network 8000 machines">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-8000-machines.jpg" alt="network 8000 machines">
 </div>
 </div>
 <div class="imageblock" style="float: right;">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-rack-machines-type.jpg" alt="network rack machines type" width="400">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-rack-machines-type.jpg" alt="network rack machines type" width="400">
 </div>
 </div>
 <div class="paragraph">
@@ -602,7 +611,7 @@ RETURN s.name, collect(v.name) as versions, [x IN collect([d.name,dv.name]) WHER
 </div>
 <div class="imageblock">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-software-arrows.jpg" alt="network software arrows">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-software-arrows.jpg" alt="network software arrows">
 </div>
 </div>
 <div class="listingblock">
@@ -615,7 +624,7 @@ RETURN *<!--/code--></pre>
 </div>
 <div class="imageblock">
 <div class="content">
-<img src="http://guides.neo4j.com/sandbox/network-management/img/network-software-machine.jpg" alt="network software machine">
+<img src="https://guides.neo4j.com/sandbox/network-management/img/network-software-machine.jpg" alt="network software machine">
 </div>
 </div>
 	</div>
@@ -792,7 +801,7 @@ WITH target, source,si,head(collect(sp)) as sp, sourceAppProcess,sourceApp
 MATCH (target)-[:ROUTES]-&gt;(ti:Interface)-[:EXPOSES]-&gt;(tp:Port)&lt;-[:LISTENS]-(targetAppProcess)-[:INSTANCE]-&gt;(targetApp)
 WITH source,si,sp, sourceAppProcess,sourceApp,target,ti,head(collect(tp)) as tp, targetAppProcess, targetApp
 // todo limit to first port
-RETURN {id: apoc.create.uuid(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
+RETURN {id: randomUUID(), type:"OpenConnection",source:{ip:si.ip, port:sp.port},target:{ip:ti.ip,port:tp.port},
         connection: {source:sourceApp.name, target:targetApp.name, user: "user"+toString(toInteger(rand()*1000))+"@"+source.name,
         time:timestamp(), packets: 1, mtu: 1500 }} as event<!--/code--></pre>
 </div>
@@ -822,8 +831,7 @@ MERGE (ti:Interface {ip:event.target.ip})
 MERGE (ti)-[:LISTENS]-&gt;(tp:Port {port:event.target.port})
 
 CREATE (sp)&lt;-[:FROM]-(c:Connection {id:event.id})–[:TO]-&gt;(tp)
-SET c += event.connection // timestamp, user-info, ...
-SET c.type = event.type
+SET c += event.connection // type, timestamp, user-info, ...
 MERGE (si)-[cstats:CONNECTIONS]-&gt;(ti)
 SET si.count = coalesce(si.count,0) + 1
 SET si.packets = coalesce(si.packets,0) + event.packets
